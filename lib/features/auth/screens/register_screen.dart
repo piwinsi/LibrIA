@@ -25,14 +25,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  void _handleRegister() {
+  Future<void> _handleRegister() async {
     if (!_formKey.currentState!.validate()) return;
 
-    context.read<AuthProvider>().register(
+    final authProvider = context.read<AuthProvider>();
+    await authProvider.register(
       _nameController.text.trim(),
       _emailController.text.trim(),
     );
 
+    if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
       (route) => false,

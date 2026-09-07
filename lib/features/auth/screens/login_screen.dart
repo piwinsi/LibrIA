@@ -27,11 +27,14 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _handleLogin() {
-    final success = context.read<AuthProvider>().login(
+  Future<void> _handleLogin() async {
+    final authProvider = context.read<AuthProvider>();
+    final success = await authProvider.login(
       _emailController.text,
       _passwordController.text,
     );
+
+    if (!mounted) return;
 
     if (!success) {
       setState(() => _errorMessage = 'Correo o contraseña incorrectos.');

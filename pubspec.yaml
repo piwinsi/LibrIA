@@ -44,6 +44,16 @@ dependencies:
   # Render the app's SVG icon/logo.
   flutter_svg: ^2.0.10
 
+  # Persistencia local (RNF-07): guarda biblioteca, perfil y actividad
+  # social en el dispositivo mediante shared_preferences.
+  shared_preferences: ^2.3.2
+
+  # Interop con el navegador (Flutter Web): usado para forzar un guardado
+  # síncrono en localStorage justo antes de que la pestaña se cierre,
+  # incluyendo un cierre forzado desde el debugger (ver
+  # lib/services/local_storage_service.dart).
+  web: ^1.1.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

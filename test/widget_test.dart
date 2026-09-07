@@ -1,9 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:libria_v01/main.dart';
 
 void main() {
+  setUp(() {
+    // Persistencia local (RNF-07): las pantallas ahora leen/escriben estado
+    // vía SharedPreferences, así que se inicializa un mock en memoria antes
+    // de cada prueba para que LocalStorageService pueda operar sin acceso
+    // real a almacenamiento de plataforma.
+    SharedPreferences.setMockInitialValues({});
+  });
+
   testWidgets('Welcome screen shows login button', (
     WidgetTester tester,
   ) async {

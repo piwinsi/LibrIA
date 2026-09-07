@@ -55,11 +55,13 @@ class _UpdateProgressScreenState extends State<UpdateProgressScreen> {
             ),
             const SizedBox(height: 16),
             FilledButton(
-              onPressed: () {
-                context.read<LibraryProvider>().updateProgress(
+              onPressed: () async {
+                final libraryProvider = context.read<LibraryProvider>();
+                await libraryProvider.updateProgress(
                   widget.book.id,
                   _currentPage,
                 );
+                if (!context.mounted) return;
                 Navigator.of(context).pop();
               },
               child: const Padding(

@@ -34,19 +34,21 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.dispose();
   }
 
-  void _handleSave() {
+  Future<void> _handleSave() async {
     final genres = _genresController.text
         .split(',')
         .map((genre) => genre.trim())
         .where((genre) => genre.isNotEmpty)
         .toList();
 
-    context.read<AuthProvider>().updateProfile(
+    final authProvider = context.read<AuthProvider>();
+    await authProvider.updateProfile(
       name: _nameController.text.trim(),
       bio: _bioController.text.trim(),
       favoriteGenres: genres,
     );
 
+    if (!mounted) return;
     Navigator.of(context).pop();
   }
 
