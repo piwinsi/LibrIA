@@ -1,74 +1,137 @@
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Servicio de persistencia local (RNF-07).
+/// Servicio de persistencia local.
 ///
-/// Encapsula `shared_preferences` y expone métodos save*/load* para cada
-/// dominio de estado de la app (biblioteca, perfil, actividad social y
-/// sesión activa), serializado como JSON por cada provider antes de
-/// guardarse.
-///
-/// Nota sobre Flutter Web y el debugger: al depurar con `flutter run -d
-/// chrome`, detener la sesión desde VSCode (botón "Stop") puede cerrar la
-/// pestaña de forma más abrupta que un cierre manual y cortar una
-/// escritura en curso. Esta es una limitación conocida del flujo de
-/// depuración web, no del comportamiento de la app para un usuario final
-/// (que solo cierra pestañas o recarga normalmente) ni de un build de
-/// producción o de la versión Android/desktop empaquetada.
+/// Toda la información de LibrIA vive en el dispositivo (enfoque
+/// local-first). Se utiliza `shared_preferences` con documentos JSON,
+/// separados por usuario mediante el prefijo `libria_u_<id>_`, lo que
+/// permite tener varias cuentas en un mismo teléfono sin mezclar datos.
+/// Funciona igual en Android, iOS, Windows y web.
 class LocalStorageService {
   LocalStorageService._();
   static final instance = LocalStorageService._();
 
-  static const _libraryKey = 'libria_library_state_v1';
-  static const _profileKey = 'libria_profile_state_v1';
-  static const _socialKey = 'libria_social_state_v1';
-  static const _sessionActiveKey = 'libria_session_active_v1';
+  static const usersKey = 'libria_users_v2';
+  static const sessionKey = 'libria_session_user_v2';
+
+  static const booksDomain = 'books';
+  static const eventsDomain = 'events';
+  static const commentsDomain = 'comments';
+  static const recommendationsDomain = 'recommendations';
+  static const dismissedDomain = 'dismissed';
+
+  /// Claves de la versión anterior de la demo (datos mock), que ya no se
+  /// usan y se eliminan al iniciar.
+  static const _legacyKeys = [
+    'libria_library_state_v1',
+    'libria_profile_state_v1',
+    'libria_social_state_v1',
+    'libria_session_active_v1',
+  ];
 
   SharedPreferences? _prefs;
 
-  /// Debe llamarse una vez al inicio (por ejemplo, desde `main()`) antes de
-  /// usar cualquiera de los métodos load*, para que la instancia de
-  /// SharedPreferences esté cacheada y las lecturas sean síncronas.
-  Future<void> init() async {
-    _prefs ??= await SharedPreferences.getInstance();
+  /// Debe llamarse una vez antes de usar el servicio.
+  Future<void> init({bool force = false}) async {
+    if (_prefs != null && !force) return;
+    _prefs = await SharedPreferences.getInstance();
+    for (final key in _legacyKeys) {
+      if (_prefs!.containsKey(key)) await _prefs!.remove(key);
+    }
   }
 
-  Future<void> saveLibrary(String jsonState) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_libraryKey, jsonState);
+  /// Reinicia la instancia en pruebas automatizadas.
+  @visibleForTesting
+  Future<void> resetForTests() => init(force: true);
+
+  SharedPreferences get _p {
+    final prefs = _prefs;
+    if (prefs == null) {
+      throw StateError('LocalStorageService.init() no ha sido llamado.');
+    }
+    return prefs;
   }
 
-  String? loadLibrary() {
-    return _prefs?.getString(_libraryKey);
+  static String userKey(String userId, String domain) =>
+      'libria_u_${userId}_${domain}_v2';
+
+  String? readString(String key) => _p.getString(key);
+
+  Future<void> writeString(String key, String? value) async {
+    if (value == null) {
+      await _p.remove(key);
+    } else {
+      await _p.setString(key, value);
+    }
   }
 
-  Future<void> saveProfile(String jsonState) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_profileKey, jsonState);
+  List<Map<String, dynamic>> readList(String key) {
+    final raw = _p.getString(key);
+    if (raw == null) return [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return [];
+      return decoded
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+    } catch (_) {
+      // Documento corrupto: se ignora en lugar de bloquear la app.
+      return [];
+    }
   }
 
-  String? loadProfile() {
-    return _prefs?.getString(_profileKey);
+  Future<void> writeList(String key, List<Map<String, dynamic>> items) =>
+      _p.setString(key, jsonEncode(items));
+
+  List<String> readStrings(String key) => _p.getStringList(key) ?? [];
+
+  Future<void> writeStrings(String key, List<String> values) =>
+      _p.setStringList(key, values);
+
+  // -------------------------------------------------------------------
+  // Portadas personalizadas
+  // -------------------------------------------------------------------
+  //
+  // Las fotos que el usuario elige como portada se guardan comprimidas
+  // (JPEG, ~40 KB) en base64, cada una en su propia clave. Así la lista de
+  // libros sigue siendo liviana y la portada funciona en todas las
+  // plataformas, incluida la web.
+
+  static String coverKey(String bookId) => 'libria_cover_${bookId}_v2';
+
+  Future<void> saveCover(String bookId, List<int> bytes) =>
+      _p.setString(coverKey(bookId), base64Encode(bytes));
+
+  Uint8List? loadCover(String bookId) {
+    final raw = _p.getString(coverKey(bookId));
+    if (raw == null) return null;
+    try {
+      return base64Decode(raw);
+    } catch (_) {
+      return null;
+    }
   }
 
-  Future<void> saveSocial(String jsonState) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_socialKey, jsonState);
-  }
+  Future<void> removeCover(String bookId) => _p.remove(coverKey(bookId));
 
-  String? loadSocial() {
-    return _prefs?.getString(_socialKey);
-  }
-
-  /// Guarda si hay una sesión activa, independientemente de si el perfil
-  /// del usuario está guardado. Esto permite que "Cerrar sesión" oculte al
-  /// usuario al reabrir la app sin borrar sus datos de perfil, y que la
-  /// próxima vez que inicie sesión recupere el mismo perfil editado.
-  Future<void> saveSessionActive(bool active) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_sessionActiveKey, active);
-  }
-
-  bool loadSessionActive() {
-    return _prefs?.getBool(_sessionActiveKey) ?? false;
+  /// Elimina todos los datos asociados a un usuario.
+  Future<void> removeUserData(String userId) async {
+    for (final book in readList(userKey(userId, booksDomain))) {
+      final id = book['id'];
+      if (id is String) await removeCover(id);
+    }
+    for (final domain in [
+      booksDomain,
+      eventsDomain,
+      commentsDomain,
+      recommendationsDomain,
+      dismissedDomain,
+    ]) {
+      await _p.remove(userKey(userId, domain));
+    }
   }
 }

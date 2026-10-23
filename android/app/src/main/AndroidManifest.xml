@@ -1,6 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Consulta de catálogos (ISBN, búsqueda y recomendaciones). -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Escáner de código de barras ISBN. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
     <application
-        android:label="libria_v01"
+        android:label="LibrIA"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../../data/mock_users.dart';
-import '../../../main_navigation_screen.dart';
+import '../../../app/theme.dart';
 import '../../../providers/auth_provider.dart';
 import 'register_screen.dart';
 
@@ -14,10 +13,11 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _emailController = TextEditingController(text: demoCredentialEmail);
-  final _passwordController = TextEditingController(
-    text: demoCredentialPassword,
-  );
+  final _formKey = GlobalKey<FormState>();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _obscure = true;
+  bool _loading = false;
   String? _errorMessage;
 
   @override
@@ -28,22 +28,25 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _handleLogin() async {
-    final authProvider = context.read<AuthProvider>();
-    final success = await authProvider.login(
-      _emailController.text,
-      _passwordController.text,
-    );
-
+    if (!_formKey.currentState!.validate()) return;
+    setState(() {
+      _loading = true;
+      _errorMessage = null;
+    });
+    final error = await context.read<AuthProvider>().login(
+          _emailController.text,
+          _passwordController.text,
+        );
     if (!mounted) return;
-
-    if (!success) {
-      setState(() => _errorMessage = 'Correo o contraseña incorrectos.');
+    if (error != null) {
+      setState(() {
+        _loading = false;
+        _errorMessage = error;
+      });
       return;
     }
-
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
-    );
+    // La raíz de la app ya muestra la navegación principal.
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   @override
@@ -51,59 +54,72 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Iniciar sesión')),
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextField(
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                  labelText: 'Correo electrónico',
-                  border: OutlineInputBorder(),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextFormField(
+                  key: const Key('login_email'),
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  autofillHints: const [AutofillHints.email],
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(
+                    labelText: 'Correo electrónico',
+                    prefixIcon: Icon(Icons.email_outlined),
+                  ),
+                  validator: (value) => (value == null || !value.contains('@'))
+                      ? 'Ingresa tu correo.'
+                      : null,
                 ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _passwordController,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Contraseña',
-                  border: OutlineInputBorder(),
+                const SizedBox(height: 16),
+                TextFormField(
+                  key: const Key('login_password'),
+                  controller: _passwordController,
+                  obscureText: _obscure,
+                  autofillHints: const [AutofillHints.password],
+                  onFieldSubmitted: (_) => _handleLogin(),
+                  decoration: InputDecoration(
+                    labelText: 'Contraseña',
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    suffixIcon: IconButton(
+                      tooltip: _obscure ? 'Mostrar contraseña' : 'Ocultar contraseña',
+                      icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
+                      onPressed: () => setState(() => _obscure = !_obscure),
+                    ),
+                  ),
+                  validator: (value) => (value == null || value.isEmpty)
+                      ? 'Ingresa tu contraseña.'
+                      : null,
                 ),
-              ),
-              if (_errorMessage != null) ...[
-                const SizedBox(height: 12),
-                Text(
-                  _errorMessage!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                if (_errorMessage != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    _errorMessage!,
+                    style: const TextStyle(color: AppColors.danger),
+                  ),
+                ],
+                const SizedBox(height: 24),
+                FilledButton(
+                  key: const Key('login_submit'),
+                  onPressed: _loading ? null : _handleLogin,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Text(_loading ? 'Ingresando...' : 'Ingresar'),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                  ),
+                  child: const Text('¿No tienes cuenta? Regístrate'),
                 ),
               ],
-              const SizedBox(height: 24),
-              FilledButton(
-                onPressed: _handleLogin,
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Text('Ingresar'),
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Cuenta de demostración precargada: demo@booktrack.cl / 123456',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey),
-              ),
-              const SizedBox(height: 8),
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const RegisterScreen()),
-                  );
-                },
-                child: const Text('¿No tienes cuenta? Regístrate'),
-              ),
-            ],
+            ),
           ),
         ),
       ),

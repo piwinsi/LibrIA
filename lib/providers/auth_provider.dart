@@ -1,144 +1,201 @@
-import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
 
-import '../data/mock_users.dart';
+import '../core/utils.dart';
+import '../data/demo_seed.dart';
 import '../models/user.dart';
 import '../services/local_storage_service.dart';
+import '../services/password_hasher.dart';
 
+/// Gestión de cuentas locales (RF-01), perfil (RF-02), privacidad (RNF-03)
+/// y credenciales protegidas con hash (RNF-04).
 class AuthProvider extends ChangeNotifier {
+  AuthProvider({LocalStorageService? storage})
+      : _storage = storage ?? LocalStorageService.instance;
+
+  final LocalStorageService _storage;
+  List<AppUser> _users = [];
   AppUser? _currentUser;
 
-  bool get isLoggedIn => _currentUser != null;
   AppUser? get currentUser => _currentUser;
+  bool get isLoggedIn => _currentUser != null;
+  bool get needsOnboarding =>
+      _currentUser != null && !_currentUser!.onboardingCompleted;
 
-  Future<bool> login(String email, String password) async {
-    if (email.trim() == demoCredentialEmail &&
-        password == demoCredentialPassword) {
-      // Si ya existe un perfil guardado (por ejemplo, editado en una sesión
-      // anterior), se reutiliza tal cual en vez de sobrescribirlo con el
-      // usuario de demostración. Solo se usa mockDemoUser cuando todavía no
-      // hay nada persistido (primer inicio de sesión).
-      final storedProfile = await _loadStoredProfileOrNull();
-      _currentUser = storedProfile ?? mockDemoUser;
-      notifyListeners();
-      // Se espera (await) la escritura en disco para evitar una condición
-      // de carrera: si el proceso se detiene (hot restart, cierre del
-      // debugger) justo después de este cambio, sin este await el Future
-      // de persist() podía quedar interrumpido a mitad de camino y el
-      // cambio se perdía silenciosamente.
-      await persist();
-      await LocalStorageService.instance.saveSessionActive(true);
-      return true;
+  /// Carga cuentas y sesión guardadas. Debe esperarse antes de `runApp()`.
+  Future<void> hydrate() async {
+    _users = [];
+    for (final json in _storage.readList(LocalStorageService.usersKey)) {
+      try {
+        _users.add(AppUser.fromJson(json));
+      } catch (_) {
+        // Registro corrupto: se omite.
+      }
     }
-    return false;
-  }
-
-  Future<void> register(String name, String email) async {
-    _currentUser = AppUser(
-      id: 'user_${DateTime.now().millisecondsSinceEpoch}',
-      name: name,
-      email: email,
-    );
+    final sessionId = _storage.readString(LocalStorageService.sessionKey);
+    _currentUser = _findById(sessionId);
     notifyListeners();
-    await persist();
-    await LocalStorageService.instance.saveSessionActive(true);
   }
 
-  Future<void> updateProfile({
-    String? name,
-    String? bio,
-    List<String>? favoriteGenres,
+  AppUser? _findById(String? id) {
+    if (id == null) return null;
+    for (final user in _users) {
+      if (user.id == id) return user;
+    }
+    return null;
+  }
+
+  AppUser? _findByEmail(String email) {
+    final normalized = email.trim().toLowerCase();
+    for (final user in _users) {
+      if (user.email == normalized) return user;
+    }
+    return null;
+  }
+
+  /// Crea una cuenta. Devuelve un mensaje de error o `null` si tuvo éxito.
+  Future<String?> register({
+    required String name,
+    required String email,
+    required String password,
   }) async {
-    final user = _currentUser;
-    if (user == null) return;
+    final normalizedEmail = email.trim().toLowerCase();
+    if (name.trim().isEmpty) return 'Ingresa tu nombre.';
+    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(normalizedEmail)) {
+      return 'Ingresa un correo válido.';
+    }
+    if (password.length < 8) {
+      return 'La contraseña debe tener al menos 8 caracteres.';
+    }
+    if (_findByEmail(normalizedEmail) != null) {
+      return 'Ya existe una cuenta con ese correo en este dispositivo.';
+    }
 
-    _currentUser = user.copyWith(
-      name: name,
-      bio: bio,
-      favoriteGenres: favoriteGenres,
+    final salt = PasswordHasher.generateSalt();
+    final user = AppUser(
+      id: newId('user'),
+      name: name.trim(),
+      email: normalizedEmail,
+      passwordHash: PasswordHasher.hash(password, salt),
+      salt: salt,
+      createdAt: DateTime.now(),
     );
-    notifyListeners();
-    await persist();
+    _users.add(user);
+    await _saveUsers();
+    await _startSession(user);
+    return null;
+  }
+
+  /// Inicia sesión. Devuelve un mensaje de error o `null` si tuvo éxito.
+  Future<String?> login(String email, String password) async {
+    final user = _findByEmail(email);
+    if (user == null ||
+        !PasswordHasher.verify(password, user.salt, user.passwordHash)) {
+      return 'Correo o contraseña incorrectos.';
+    }
+    await _startSession(user);
+    return null;
+  }
+
+  /// Ingresa con la cuenta de demostración; la crea con datos de ejemplo la
+  /// primera vez.
+  Future<void> loginDemo() async {
+    var user = _findByEmail(demoEmail);
+    if (user == null) {
+      final salt = PasswordHasher.generateSalt();
+      user = AppUser(
+        id: newId('user'),
+        name: demoName,
+        email: demoEmail,
+        passwordHash: PasswordHasher.hash(demoPassword, salt),
+        salt: salt,
+        createdAt: DateTime.now(),
+        bio: 'Cuenta de demostración de LibrIA.',
+        favoriteGenres: demoGenres,
+        onboardingCompleted: true,
+      );
+      _users.add(user);
+      await _saveUsers();
+      await DemoSeed.write(_storage, user.id);
+    }
+    await _startSession(user);
   }
 
   Future<void> logout() async {
-    // Importante: cerrar sesión solo debe limpiar el usuario en memoria y
-    // marcar que no hay sesión activa; NO debe borrar el perfil ya
-    // persistido en disco. Antes, logout() llamaba a persist(), que con
-    // _currentUser == null sobrescribía el almacenamiento con "sin
-    // perfil", perdiendo cualquier edición hecha antes de cerrar sesión.
     _currentUser = null;
-    notifyListeners();
-    await LocalStorageService.instance.saveSessionActive(false);
-  }
-
-  /// Lee el perfil persistido (si existe) y lo devuelve como [AppUser], sin
-  /// modificar el estado en memoria. Usado por [login] para no pisar un
-  /// perfil ya editado con los datos de demostración.
-  Future<AppUser?> _loadStoredProfileOrNull() async {
-    final stored = LocalStorageService.instance.loadProfile();
-    if (stored == null) return null;
-
-    try {
-      final decoded = jsonDecode(stored);
-      if (decoded == null) return null;
-      final map = decoded as Map<String, dynamic>;
-      return AppUser(
-        id: map['id'] as String,
-        name: map['name'] as String,
-        email: map['email'] as String,
-        avatarUrl: map['avatarUrl'] as String?,
-        bio: map['bio'] as String?,
-        favoriteGenres: List<String>.from(map['favoriteGenres'] as List? ?? []),
-        booksRead: map['booksRead'] as int? ?? 0,
-        followers: map['followers'] as int? ?? 0,
-        following: map['following'] as int? ?? 0,
-      );
-    } catch (_) {
-      return null;
-    }
-  }
-
-  /// Lee el estado de sesión/perfil serializado desde [LocalStorageService]
-  /// y lo carga en memoria. Debe esperarse (`await`) antes de `runApp()`.
-  ///
-  /// Importante: el perfil y la sesión activa se guardan por separado. Si
-  /// el usuario cerró sesión, el perfil sigue en disco (para reutilizarlo
-  /// en el próximo login), pero `hydrate()` no debe dejarlo logueado
-  /// automáticamente: por eso solo restaura `_currentUser` cuando la
-  /// bandera de sesión activa está en `true`.
-  Future<void> hydrate() async {
-    if (!LocalStorageService.instance.loadSessionActive()) return;
-
-    final storedProfile = await _loadStoredProfileOrNull();
-    if (storedProfile == null) return;
-
-    _currentUser = storedProfile;
+    await _storage.writeString(LocalStorageService.sessionKey, null);
     notifyListeners();
   }
 
-  /// Serializa el estado actual (usuario en sesión, si existe) y lo guarda
-  /// mediante [LocalStorageService]. Se invoca automáticamente tras cada
-  /// cambio de estado (login, registro, edición de perfil, logout).
-  Future<void> persist() async {
+  Future<void> updateProfile({required String name, String? bio}) async {
+    await _replaceCurrent(
+      (user) => user.copyWith(name: name.trim(), bio: bio?.trim() ?? ''),
+    );
+  }
+
+  /// Guarda los géneros favoritos y marca el onboarding como completado.
+  Future<void> setFavoriteGenres(List<String> genres) async {
+    await _replaceCurrent(
+      (user) => user.copyWith(
+        favoriteGenres: genres,
+        onboardingCompleted: true,
+      ),
+    );
+  }
+
+  Future<void> setProfilePrivate(bool isPrivate) async {
+    await _replaceCurrent((user) => user.copyWith(isProfilePrivate: isPrivate));
+  }
+
+  /// Cambia la contraseña. Devuelve un mensaje de error o `null`.
+  Future<String?> changePassword(String current, String newPassword) async {
     final user = _currentUser;
-    if (user == null) {
-      await LocalStorageService.instance.saveProfile(jsonEncode(null));
-      return;
+    if (user == null) return 'No hay una sesión activa.';
+    if (!PasswordHasher.verify(current, user.salt, user.passwordHash)) {
+      return 'La contraseña actual no es correcta.';
     }
-
-    final map = {
-      'id': user.id,
-      'name': user.name,
-      'email': user.email,
-      'avatarUrl': user.avatarUrl,
-      'bio': user.bio,
-      'favoriteGenres': user.favoriteGenres,
-      'booksRead': user.booksRead,
-      'followers': user.followers,
-      'following': user.following,
-    };
-    await LocalStorageService.instance.saveProfile(jsonEncode(map));
+    if (newPassword.length < 8) {
+      return 'La nueva contraseña debe tener al menos 8 caracteres.';
+    }
+    final salt = PasswordHasher.generateSalt();
+    await _replaceCurrent(
+      (u) => u.copyWith(
+        salt: salt,
+        passwordHash: PasswordHasher.hash(newPassword, salt),
+      ),
+    );
+    return null;
   }
+
+  /// Elimina la cuenta actual y todos sus datos del dispositivo.
+  Future<void> deleteAccount() async {
+    final user = _currentUser;
+    if (user == null) return;
+    _users.removeWhere((u) => u.id == user.id);
+    await _saveUsers();
+    await _storage.removeUserData(user.id);
+    await logout();
+  }
+
+  Future<void> _startSession(AppUser user) async {
+    _currentUser = user;
+    await _storage.writeString(LocalStorageService.sessionKey, user.id);
+    notifyListeners();
+  }
+
+  Future<void> _replaceCurrent(AppUser Function(AppUser) update) async {
+    final user = _currentUser;
+    if (user == null) return;
+    final updated = update(user);
+    _currentUser = updated;
+    _users = [
+      for (final u in _users) u.id == updated.id ? updated : u,
+    ];
+    notifyListeners();
+    await _saveUsers();
+  }
+
+  Future<void> _saveUsers() => _storage.writeList(
+        LocalStorageService.usersKey,
+        _users.map((u) => u.toJson()).toList(),
+      );
 }

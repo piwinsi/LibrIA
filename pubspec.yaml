@@ -1,5 +1,5 @@
 name: libria_v01
-description: "A new Flutter project."
+description: "LibrIA - registro, seguimiento y socializacion de la actividad lectora."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -47,6 +47,21 @@ dependencies:
   # Persistencia local (RNF-07): guarda biblioteca, perfil y actividad
   # social en el dispositivo mediante shared_preferences.
   shared_preferences: ^2.3.2
+
+  # Consultas a Google Books / Open Library (ISBN, búsqueda y sugerencias).
+  http: ^1.2.2
+
+  # Hash de contraseñas (RNF-04).
+  crypto: ^3.0.6
+
+  # Escáner de código de barras ISBN con la cámara.
+  mobile_scanner: ^7.0.0
+
+  # Compartir recomendaciones por otras apps (RF-08).
+  share_plus: ^11.0.0
+
+  # Portada personalizada desde la galería o la cámara.
+  image_picker: ^1.1.2
 
 dev_dependencies:
   flutter_test:
