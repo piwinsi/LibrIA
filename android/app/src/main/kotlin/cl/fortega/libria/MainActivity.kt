@@ -1,4 +1,4 @@
-package com.example.libria_v01
+package cl.fortega.libria
 
 import io.flutter.embedding.android.FlutterActivity
 
