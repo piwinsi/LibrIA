@@ -146,11 +146,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                const Text(
-                  'Tu cuenta y tu actividad lectora se guardan solo en este '
-                  'dispositivo. La contraseña se almacena cifrada (hash).',
+                Text(
+                  context.read<AuthProvider>().cloudAvailable
+                      ? 'Tu actividad se guarda en este dispositivo y se respalda '
+                          'de forma privada en la nube. La contraseña la protege '
+                          'Firebase Authentication; la app no la almacena.'
+                      : 'Tu cuenta y tu actividad lectora se guardan solo en este '
+                          'dispositivo. La contraseña se almacena cifrada (hash).',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
                 ),
               ],
             ),

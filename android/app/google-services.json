@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "576587971805",
+    "project_id": "libria-fortega",
+    "storage_bucket": "libria-fortega.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:576587971805:android:a79a8c55152766e36fef34",
+        "android_client_info": {
+          "package_name": "cl.fortega.libria"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "576587971805-em4pkck9cm50aeepaqs2r79ieu8ptrcs.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC8iFTS8_5OO_vBHZX7Xj7L782Rxqr9bmw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "576587971805-em4pkck9cm50aeepaqs2r79ieu8ptrcs.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

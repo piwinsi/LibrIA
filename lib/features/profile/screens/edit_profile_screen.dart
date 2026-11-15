@@ -64,18 +64,59 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Future<void> _deleteAccount() async {
+    final auth = context.read<AuthProvider>();
     final ok = await confirmAction(
       context,
       title: 'Eliminar cuenta',
-      message:
-          'Se borrarán tu cuenta, tu biblioteca, tus comentarios y tu historial de este dispositivo. Esta acción no se puede deshacer.',
+      message: auth.deleteRequiresPassword
+          ? 'Se borrarán tu cuenta, tu biblioteca, tus comentarios y tu historial, en este dispositivo y en la nube. Esta acción no se puede deshacer.'
+          : 'Se borrarán tu cuenta, tu biblioteca, tus comentarios y tu historial de este dispositivo. Esta acción no se puede deshacer.',
       confirmLabel: 'Eliminar cuenta',
       destructive: true,
     );
     if (!ok || !mounted) return;
+
+    String? password;
+    if (auth.deleteRequiresPassword) {
+      password = await _askPassword();
+      if (password == null || !mounted) return;
+    }
     final navigator = Navigator.of(context);
-    await context.read<AuthProvider>().deleteAccount();
+    final messenger = ScaffoldMessenger.of(context);
+    final error = await auth.deleteAccount(password: password);
+    if (error != null) {
+      messenger.showSnackBar(SnackBar(content: Text(error)));
+      return;
+    }
     navigator.popUntil((route) => route.isFirst);
+  }
+
+  /// Pide la contraseña para confirmar la eliminación en la nube.
+  Future<String?> _askPassword() {
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirma tu contraseña'),
+        content: TextField(
+          controller: controller,
+          obscureText: true,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Contraseña'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+            onPressed: () => Navigator.of(ctx).pop(controller.text),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    ).whenComplete(controller.dispose);
   }
 
   @override

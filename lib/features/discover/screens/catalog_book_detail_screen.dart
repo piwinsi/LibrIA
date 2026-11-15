@@ -23,6 +23,8 @@ class CatalogBookDetailScreen extends StatelessWidget {
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
     final added = await library.addFromCatalog(book, status: status);
+    // Si se llegó desde una sugerencia, cuenta como aceptada (OE3).
+    if (reason != null) await library.recordSuggestionAccepted(book.key);
     navigator.pushReplacement(
       MaterialPageRoute(builder: (_) => BookDetailScreen(bookId: added.id)),
     );

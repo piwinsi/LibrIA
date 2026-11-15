@@ -8,7 +8,7 @@ LibrIA permite al lector armar su biblioteca personal, registrar su avance, deja
 
 | Requisito | Descripción |
 |-----------|-------------|
-| RF-01 | Cuentas locales de usuario (registro e inicio de sesión). |
+| RF-01 | Cuentas de usuario con Firebase Authentication (registro, inicio y cierre de sesión), con respaldo en Cloud Firestore. |
 | RF-02 | Perfil lector editable, con géneros favoritos elegidos en el onboarding. |
 | RF-03 | Biblioteca personal: agregar libros por búsqueda (título/autor), escaneo del código de barras ISBN o formulario manual, con portada desde la galería o la cámara. |
 | RF-04 | Estados de lectura: pendiente, leyendo, en pausa, terminado y abandonado. |
@@ -17,11 +17,27 @@ LibrIA permite al lector armar su biblioteca personal, registrar su avance, deja
 | RF-07 | Estadísticas e historial de la trayectoria lectora, con gráficos. |
 | RF-08 | Recomendaciones compartidas con otras apps. |
 | RNF-03 | Privacidad: el perfil es privado por defecto. |
-| RNF-04 | Contraseñas almacenadas con hash, nunca en texto plano. |
+| RNF-04 | Credenciales gestionadas por Firebase Authentication; la app no guarda contraseñas (las cuentas locales usan hash con sal). |
 | RNF-05 | Presentación visual consistente de los estados de lectura. |
 | RNF-07 | Persistencia local de biblioteca, perfil y actividad en el dispositivo. |
 
 Además, la sección **Descubrir** ofrece sugerencias de lectura generadas por un motor de recomendación que combina los géneros del onboarding con los géneros y autores de la biblioteca del usuario; a medida que se registra actividad, las sugerencias se apoyan cada vez más en las lecturas reales. Cada sugerencia indica el motivo por el que se propone.
+
+## Cuentas y respaldo en la nube (Firebase)
+
+En Android y web, LibrIA usa **Firebase Authentication** para las cuentas y **Cloud Firestore** para respaldar los datos del lector. La app sigue siendo *local-first*: lee y escribe primero en el dispositivo y envía los cambios a la nube unos segundos después.
+
+- Las contraseñas las gestiona Firebase Authentication; la app no las guarda (RNF-04).
+- Cada lector tiene sus datos en `users/{uid}/` (`books`, `events`, `comments`, `recommendations` y `meta`). Las reglas de [firestore.rules](firestore.rules) solo permiten que cada usuario lea y escriba lo suyo.
+- Al iniciar sesión en otro dispositivo se descargan y combinan los datos (consistencia eventual): en los libros gana la versión más reciente; eventos, comentarios y recomendaciones se unen por identificador; los borrados se propagan con una marca `deleted`.
+- La cuenta de demostración es siempre local. En Windows (sin Firebase configurado) las cuentas son locales con contraseña cifrada (hash con sal).
+- El estado del respaldo se ve en **Perfil → Respaldo en la nube**.
+
+Para publicar las reglas de acceso (requiere `firebase-tools`):
+
+```bash
+firebase deploy --only firestore:rules --project libria-fortega
+```
 
 ## Fuentes de datos
 
@@ -43,12 +59,13 @@ Desde la pantalla de bienvenida se puede entrar con una cuenta de demostración 
 ## Tecnologías
 
 - [Flutter](https://flutter.dev/) (Dart SDK ^3.12.2)
+- `firebase_core`, `firebase_auth` y `cloud_firestore` para cuentas y respaldo
 - `provider` para la gestión de estado
 - `shared_preferences` para la persistencia local
 - `http` para las consultas a los catálogos
 - `fl_chart` para los gráficos de estadísticas
 - `mobile_scanner` para el escáner de ISBN
-- `image_picker`, `share_plus`, `crypto` y `flutter_svg`
+- `image_picker`, `share_plus` y `crypto`
 
 ## Estructura del proyecto
 
@@ -91,3 +108,13 @@ flutter test
 ```
 
 Las pruebas están en [test/](test/): `logic_test.dart` cubre utilidades (ISBN, géneros, hash), el motor de recomendaciones y el flujo de la biblioteca, y `widget_test.dart` los flujos de bienvenida, registro con onboarding y la cuenta demo.
+
+`cloud_sync_test.dart` verifica las cuentas en la nube y el respaldo con una nube simulada en memoria, incluida la **prueba de recuperación** (un dispositivo nuevo restaura biblioteca, perfil e historial).
+
+`recommendation_eval_test.dart` ejecuta la **evaluación fuera de línea** del motor (protocolo *leave-one-out* sobre el catálogo local, ver [lib/services/recommendation_evaluator.dart](lib/services/recommendation_evaluator.dart)) e imprime hit rate@10, cobertura y diversidad; también verifica la métrica de aceptación de sugerencias:
+
+```bash
+flutter test test/recommendation_eval_test.dart --reporter expanded
+```
+
+La tasa de aceptación real (sugerencias agregadas / sugerencias mostradas) se registra por cuenta y se ve en **Estadísticas → Tus sugerencias**.

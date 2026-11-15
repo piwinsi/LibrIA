@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 
 import '../../../app/theme.dart';
@@ -35,11 +34,14 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  SvgPicture.asset(
-                    'assets/images/logo.svg',
+                  // H-02: el logo se usa como PNG con transparencia; el SVG
+                  // original incrustaba imágenes con máscaras y filtros que
+                  // flutter_svg no soporta y generaban una advertencia.
+                  Image.asset(
+                    'assets/images/logo.png',
                     width: 140,
                     height: 140,
-                    semanticsLabel: 'Logo de LibrIA',
+                    semanticLabel: 'Logo de LibrIA',
                   ),
                   const SizedBox(height: 24),
                   Text(
@@ -88,10 +90,16 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  const Text(
-                    'Tus datos se guardan solo en este dispositivo.',
+                  Text(
+                    context.read<AuthProvider>().cloudAvailable
+                        ? 'Tus datos se guardan en tu dispositivo y se respaldan '
+                            'de forma privada en la nube.'
+                        : 'Tus datos se guardan solo en este dispositivo.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
                   ),
                 ],
               ),

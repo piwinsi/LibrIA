@@ -357,7 +357,10 @@ class GenreTags extends StatelessWidget {
 void showSnack(BuildContext context, String message, {SnackBarAction? action}) {
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(content: Text(message), action: action));
+    ..showSnackBar(
+      // persist: false mantiene el cierre automático aunque haya acción.
+      SnackBar(content: Text(message), action: action, persist: false),
+    );
 }
 
 /// Diálogo de confirmación reutilizable.

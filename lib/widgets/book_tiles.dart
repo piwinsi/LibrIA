@@ -98,55 +98,62 @@ class RecommendationTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final book = recommendation.book;
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => openCatalogBook(context, book, reason: recommendation.reason),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 4, 12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              BookCover(title: book.title, url: book.coverUrl, width: 60, height: 90),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+    return SuggestionImpression(
+      suggestionKey: book.key,
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => openCatalogBook(context, book, reason: recommendation.reason),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 4, 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                BookCover(title: book.title, url: book.coverUrl, width: 60, height: 90),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        book.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                      ),
+                      Text(
+                        book.author,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: AppColors.textSecondary),
+                      ),
+                      const SizedBox(height: 6),
+                      ReasonLabel(reason: recommendation.reason),
+                      const SizedBox(height: 6),
+                      GenreTags(genres: book.genres),
+                    ],
+                  ),
+                ),
+                Column(
                   children: [
-                    Text(
-                      book.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                    IconButton(
+                      tooltip: 'Quiero leerlo',
+                      icon: const Icon(Icons.bookmark_add_outlined),
+                      onPressed: () => addCatalogBookToLibrary(
+                        context,
+                        book,
+                        fromSuggestion: true,
+                      ),
                     ),
-                    Text(
-                      book.author,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: AppColors.textSecondary),
+                    IconButton(
+                      tooltip: 'No me interesa',
+                      icon: const Icon(Icons.close),
+                      onPressed: () => dismissSuggestion(context, book),
                     ),
-                    const SizedBox(height: 6),
-                    ReasonLabel(reason: recommendation.reason),
-                    const SizedBox(height: 6),
-                    GenreTags(genres: book.genres),
                   ],
                 ),
-              ),
-              Column(
-                children: [
-                  IconButton(
-                    tooltip: 'Quiero leerlo',
-                    icon: const Icon(Icons.bookmark_add_outlined),
-                    onPressed: () => addCatalogBookToLibrary(context, book),
-                  ),
-                  IconButton(
-                    tooltip: 'No me interesa',
-                    icon: const Icon(Icons.close),
-                    onPressed: () => dismissSuggestion(context, book),
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -163,33 +170,36 @@ class RecommendationCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final book = recommendation.book;
-    return SizedBox(
-      width: 120,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => openCatalogBook(context, book, reason: recommendation.reason),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            BookCover(title: book.title, url: book.coverUrl, width: 120, height: 170),
-            const SizedBox(height: 6),
-            Text(
-              book.title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-            ),
-            Text(
-              recommendation.reason,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 11,
-                color: AppColors.textSecondary,
-                fontStyle: FontStyle.italic,
+    return SuggestionImpression(
+      suggestionKey: book.key,
+      child: SizedBox(
+        width: 120,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => openCatalogBook(context, book, reason: recommendation.reason),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              BookCover(title: book.title, url: book.coverUrl, width: 120, height: 170),
+              const SizedBox(height: 6),
+              Text(
+                book.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
               ),
-            ),
-          ],
+              Text(
+                recommendation.reason,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.textSecondary,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -273,6 +283,7 @@ Future<void> addCatalogBookToLibrary(
   BuildContext context,
   CatalogBook book, {
   ReadingStatus status = ReadingStatus.pending,
+  bool fromSuggestion = false,
 }) async {
   final library = context.read<LibraryProvider>();
   final messenger = ScaffoldMessenger.of(context);
@@ -298,6 +309,7 @@ Future<void> addCatalogBookToLibrary(
     return;
   }
   final added = await library.addFromCatalog(book, status: status);
+  if (fromSuggestion) await library.recordSuggestionAccepted(book.key);
   messenger
     ..hideCurrentSnackBar()
     ..showSnackBar(
@@ -321,4 +333,53 @@ Future<void> dismissSuggestion(BuildContext context, CatalogBook book) async {
     ..showSnackBar(
       SnackBar(content: Text('No volveremos a sugerirte «${book.title}».')),
     );
+}
+
+/// Registra en [LibraryProvider] que una sugerencia se mostró en pantalla
+/// (una vez por libro), para calcular la tasa de aceptación (OE3).
+class SuggestionImpression extends StatefulWidget {
+  const SuggestionImpression({
+    super.key,
+    required this.suggestionKey,
+    required this.child,
+  });
+
+  final String suggestionKey;
+  final Widget child;
+
+  @override
+  State<SuggestionImpression> createState() => _SuggestionImpressionState();
+}
+
+class _SuggestionImpressionState extends State<SuggestionImpression> {
+  /// Última clave registrada por este widget.
+  String? _recordedKey;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _maybeRecord();
+  }
+
+  @override
+  void didUpdateWidget(covariant SuggestionImpression oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _maybeRecord();
+  }
+
+  /// Solo cuenta la sugerencia si está realmente a la vista: las pestañas
+  /// inactivas de la navegación inferior siguen construidas (IndexedStack),
+  /// pero `Visibility.of` las informa como ocultas.
+  void _maybeRecord() {
+    final key = widget.suggestionKey;
+    if (_recordedKey == key || !Visibility.of(context)) return;
+    _recordedKey = key;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<LibraryProvider>().recordSuggestionShown(key);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }

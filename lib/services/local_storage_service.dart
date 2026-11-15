@@ -23,6 +23,11 @@ class LocalStorageService {
   static const recommendationsDomain = 'recommendations';
   static const dismissedDomain = 'dismissed';
 
+  /// Claves de sugerencias mostradas y aceptadas, para medir la tasa de
+  /// aceptación de las recomendaciones (OE3).
+  static const shownSuggestionsDomain = 'suggestions_shown';
+  static const acceptedSuggestionsDomain = 'suggestions_accepted';
+
   /// Claves de la versión anterior de la demo (datos mock), que ya no se
   /// usan y se eliminan al iniciar.
   static const _legacyKeys = [
@@ -130,6 +135,8 @@ class LocalStorageService {
       commentsDomain,
       recommendationsDomain,
       dismissedDomain,
+      shownSuggestionsDomain,
+      acceptedSuggestionsDomain,
     ]) {
       await _p.remove(userKey(userId, domain));
     }

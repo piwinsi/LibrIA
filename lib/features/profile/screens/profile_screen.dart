@@ -164,12 +164,8 @@ class ProfileScreen extends StatelessWidget {
                   context.read<AuthProvider>().setProfilePrivate(value),
             ),
           ),
-          const SizedBox(height: 8),
-          const Text(
-            'Todos tus datos se guardan únicamente en este dispositivo.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-          ),
+          const SectionHeader(title: 'Respaldo en la nube'),
+          _SyncCard(library: library, isCloudAccount: user.isCloudAccount),
           const SizedBox(height: 16),
           OutlinedButton.icon(
             key: const Key('logout_button'),
@@ -203,5 +199,70 @@ class _ProfileStat extends StatelessWidget {
         Text(label, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
       ],
     );
+  }
+}
+
+/// Estado del respaldo en Firestore y acción para sincronizar a mano.
+class _SyncCard extends StatelessWidget {
+  const _SyncCard({required this.library, required this.isCloudAccount});
+
+  final LibraryProvider library;
+  final bool isCloudAccount;
+
+  @override
+  Widget build(BuildContext context) {
+    final (IconData icon, String title, String subtitle) = switch (library.syncStatus) {
+      SyncStatus.localOnly => (
+          Icons.phone_android,
+          'Solo en este dispositivo',
+          isCloudAccount
+              ? 'El respaldo no está disponible en esta plataforma.'
+              : 'Esta cuenta no tiene respaldo en la nube.',
+        ),
+      SyncStatus.signedOut => (
+          Icons.cloud_off_outlined,
+          'Respaldo en pausa',
+          'Cierra sesión y vuelve a ingresar para reanudar el respaldo.',
+        ),
+      SyncStatus.syncing => (
+          Icons.cloud_sync_outlined,
+          'Sincronizando...',
+          'Respaldando tu biblioteca en la nube.',
+        ),
+      SyncStatus.synced => (
+          Icons.cloud_done_outlined,
+          'Respaldo al día',
+          library.lastSyncAt == null
+              ? 'Tus datos están respaldados.'
+              : 'Última sincronización: ${_time(library.lastSyncAt!)}',
+        ),
+      SyncStatus.error => (
+          Icons.cloud_off_outlined,
+          'Respaldo pendiente',
+          library.syncError ?? 'No se pudo sincronizar.',
+        ),
+    };
+    final canSync = library.syncStatus == SyncStatus.synced ||
+        library.syncStatus == SyncStatus.error;
+    return Card(
+      child: ListTile(
+        key: const Key('sync_status'),
+        leading: Icon(icon, color: AppColors.secondary),
+        title: Text(title),
+        subtitle: Text(subtitle),
+        trailing: canSync
+            ? IconButton(
+                tooltip: 'Sincronizar ahora',
+                icon: const Icon(Icons.sync),
+                onPressed: library.syncNow,
+              )
+            : null,
+      ),
+    );
+  }
+
+  static String _time(DateTime t) {
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${two(t.day)}-${two(t.month)}-${t.year} ${two(t.hour)}:${two(t.minute)}';
   }
 }

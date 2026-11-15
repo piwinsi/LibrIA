@@ -1,0 +1,15 @@
+rules_version = '2';
+
+// Reglas de acceso de LibrIA (RNF-03, privacidad por defecto).
+// Cada lector solo puede leer y escribir sus propios documentos en
+// users/{uid}/...; cualquier otro acceso se rechaza.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

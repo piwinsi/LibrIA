@@ -1,17 +1,48 @@
+import 'package:firebase_auth/firebase_auth.dart' show FirebaseAuth;
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'app/app.dart';
+import 'firebase_options.dart';
 import 'providers/auth_provider.dart';
 import 'providers/library_provider.dart';
 import 'providers/recommendation_provider.dart';
 import 'services/book_lookup_service.dart';
+import 'services/cloud_backend.dart';
+import 'services/firebase_cloud_backend.dart';
 import 'services/local_storage_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final app = await LibrIADemo.bootstrap();
+  final cloud = await initCloud();
+  final app = await LibrIADemo.bootstrap(cloud: cloud);
   runApp(app);
+}
+
+/// Inicializa Firebase en las plataformas configuradas (Android y web).
+/// En el resto (por ejemplo Windows), o si falla la inicialización, la app
+/// funciona solo con datos locales.
+Future<CloudBackend> initCloud() async {
+  final supported =
+      kIsWeb || defaultTargetPlatform == TargetPlatform.android;
+  if (!supported) return const NoCloudBackend();
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    // Espera a que Firebase restaure la sesión guardada antes de mostrar la
+    // app, para saber si la cuenta en sesión puede sincronizar.
+    await FirebaseAuth.instance
+        .authStateChanges()
+        .first
+        .timeout(const Duration(seconds: 5), onTimeout: () => null);
+    return FirebaseCloudBackend();
+  } catch (e) {
+    debugPrint('Firebase no disponible; se usa solo almacenamiento local: $e');
+    return const NoCloudBackend();
+  }
 }
 
 /// Raíz de la aplicación: crea los servicios y providers, los conecta y
@@ -31,17 +62,27 @@ class LibrIADemo extends StatelessWidget {
   final BookLookupService lookup;
 
   /// Inicializa el almacenamiento local y conecta los providers.
-  /// [lookup] permite inyectar un servicio sin red en las pruebas.
-  static Future<LibrIADemo> bootstrap({BookLookupService? lookup}) async {
+  /// [lookup] permite inyectar un servicio sin red en las pruebas y [cloud]
+  /// el servicio de respaldo (sin nube por defecto).
+  static Future<LibrIADemo> bootstrap({
+    BookLookupService? lookup,
+    CloudBackend cloud = const NoCloudBackend(),
+  }) async {
     await LocalStorageService.instance.init();
     final lookupService = lookup ?? BookLookupService();
-    final auth = AuthProvider();
-    final library = LibraryProvider();
+    final auth = AuthProvider(cloud: cloud);
+    final library = LibraryProvider(cloud: cloud);
     await auth.hydrate();
 
     // La biblioteca siempre corresponde al usuario en sesión.
-    library.bindUser(auth.currentUser?.id);
-    auth.addListener(() => library.bindUser(auth.currentUser?.id));
+    void bind() => library.bindUser(
+          auth.currentUser?.id,
+          cloudUid: auth.currentUser?.cloudUid,
+        );
+    bind();
+    auth.addListener(bind);
+    // Antes de cerrar la sesión en la nube se envían los cambios pendientes.
+    auth.onBeforeCloudSignOut = library.flushSync;
 
     final recommendations = RecommendationProvider(
       lookup: lookupService,

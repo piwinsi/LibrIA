@@ -1,0 +1,24 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "libria-fortega",
+          "appId": "1:576587971805:android:a79a8c55152766e36fef34",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "libria-fortega",
+          "configurations": {
+            "android": "1:576587971805:android:a79a8c55152766e36fef34"
+          }
+        }
+      }
+    }
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  }
+}

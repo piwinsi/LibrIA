@@ -1,4 +1,10 @@
-/// Cuenta local de usuario (RF-01, RF-02, RNF-03 y RNF-04).
+/// Cuenta de usuario (RF-01, RF-02, RNF-03 y RNF-04).
+///
+/// Si la cuenta está respaldada en la nube, [cloudUid] guarda su
+/// identificador en Firebase Authentication y [passwordHash]/[salt] quedan
+/// vacíos: la contraseña la gestiona Firebase y no se guarda en el
+/// dispositivo. Las cuentas solo locales (cuenta demo, o plataformas sin
+/// Firebase) conservan el hash con sal.
 class AppUser {
   const AppUser({
     required this.id,
@@ -11,6 +17,7 @@ class AppUser {
     this.favoriteGenres = const [],
     this.onboardingCompleted = false,
     this.isProfilePrivate = true,
+    this.cloudUid,
   });
 
   final String id;
@@ -33,6 +40,12 @@ class AppUser {
   /// cuando el usuario decide compartirla.
   final bool isProfilePrivate;
 
+  /// Identificador de la cuenta en Firebase Authentication, o `null` si la
+  /// cuenta es solo local.
+  final String? cloudUid;
+
+  bool get isCloudAccount => cloudUid != null;
+
   AppUser copyWith({
     String? name,
     String? bio,
@@ -41,6 +54,7 @@ class AppUser {
     bool? isProfilePrivate,
     String? passwordHash,
     String? salt,
+    String? cloudUid,
   }) {
     return AppUser(
       id: id,
@@ -53,6 +67,7 @@ class AppUser {
       favoriteGenres: favoriteGenres ?? this.favoriteGenres,
       onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
       isProfilePrivate: isProfilePrivate ?? this.isProfilePrivate,
+      cloudUid: cloudUid ?? this.cloudUid,
     );
   }
 
@@ -67,7 +82,45 @@ class AppUser {
         'favoriteGenres': favoriteGenres,
         'onboardingCompleted': onboardingCompleted,
         'isProfilePrivate': isProfilePrivate,
+        'cloudUid': cloudUid,
       };
+
+  /// Datos del perfil que se respaldan en la nube (sin credenciales).
+  Map<String, dynamic> toProfileJson() => {
+        'name': name,
+        'email': email,
+        'createdAt': createdAt.toIso8601String(),
+        'bio': bio,
+        'favoriteGenres': favoriteGenres,
+        'onboardingCompleted': onboardingCompleted,
+        'isProfilePrivate': isProfilePrivate,
+      };
+
+  /// Reconstruye la cuenta en un dispositivo nuevo a partir del perfil
+  /// respaldado.
+  factory AppUser.fromCloudProfile({
+    required String id,
+    required String uid,
+    required String email,
+    Map<String, dynamic>? profile,
+  }) {
+    final data = profile ?? const <String, dynamic>{};
+    return AppUser(
+      id: id,
+      name: data['name'] as String? ?? email.split('@').first,
+      email: email,
+      passwordHash: '',
+      salt: '',
+      createdAt:
+          DateTime.tryParse(data['createdAt'] as String? ?? '') ?? DateTime.now(),
+      bio: data['bio'] as String?,
+      favoriteGenres:
+          List<String>.from(data['favoriteGenres'] as List? ?? const []),
+      onboardingCompleted: data['onboardingCompleted'] as bool? ?? false,
+      isProfilePrivate: data['isProfilePrivate'] as bool? ?? true,
+      cloudUid: uid,
+    );
+  }
 
   factory AppUser.fromJson(Map<String, dynamic> json) => AppUser(
         id: json['id'] as String,
@@ -83,5 +136,6 @@ class AppUser {
             List<String>.from(json['favoriteGenres'] as List? ?? const []),
         onboardingCompleted: json['onboardingCompleted'] as bool? ?? false,
         isProfilePrivate: json['isProfilePrivate'] as bool? ?? true,
+        cloudUid: json['cloudUid'] as String?,
       );
 }
